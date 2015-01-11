@@ -1,104 +1,13 @@
-package main
+package random
 
 import (
+	. "./dungeon"
 	"code.google.com/p/draw2d/draw2d"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
-	"image/png"
-	"log"
-	"os"
-	"os/exec"
 )
-
-func (d *DungeonX) Width() int  { return d.n_cols }
-func (d *DungeonX) Height() int { return d.n_rows }
-func (d *DungeonX) At(x, y int) uint {
-	check := x >= 0 && x < d.Width() && y >= 0 && y < d.Height()
-	if !check {
-		fmt.Printf("%d/%d %d/%d\n", x, d.Width(), y, d.Height())
-		return 0
-	}
-	return d.cell[y][x]
-}
-func (d *DungeonX) Doors() []*Door   { return d.door }
-func (d *DungeonX) Stairs() []*Stair { return d.stair }
-
-type Dungeon interface {
-	Width() int
-	Height() int
-	At(x, y int) uint
-	Doors() []*Door
-	Stairs() []*Stair
-}
-
-const (
-	N = NOTHING
-	O = OPENSPACE
-	d = DOORSPACE
-)
-
-var sd = &DungeonX{
-	seed:           1,
-	n_cols:         101, // 39, // w
-	n_rows:         101, // 39, // h
-	dungeon_layout: "None",
-	//dungeon_layout:  "Round", // Cross, Box, Round
-	room_min:        3,
-	room_max:        9,
-	room_layout:     "Scattered", // Scattered, Packed
-	corridor_layout: CORRIDOR_Bent,
-	remove_deadends: 100,
-	add_stairs:      20,
-	/*
-		cell: [][]uint{
-			{N, N, N, O, O, O, O, O, O, O},
-			{N, O, N, O, O, O, O, O, O, O},
-			{O, O, N, N, O, O, O, O, O, O},
-			{N, O, O, N, N, N, N, O, O, O},
-			{N, O, O, N, N, O, O, O, O, O},
-			{N, O, O, N, N, O, O, O, O, O},
-			{N, O, d, O, d, O, O, O, O, O},
-			{N, O, O, N, N, N, O, O, O, O},
-			{N, N, N, N, N, N, O, O, O, O},
-			{N, N, N, N, N, N, O, O, O, O},
-		},
-	*/
-}
-
-func init() {
-	sd.create_dungeon()
-}
-
-func main() {
-	//img := image.NewRGBA(image.Rect(0, 0, 10, 10))
-	img := NewImage(sd.Width()+1, sd.Height()+1, 9)
-
-	img.rectangleWH(0, 0, 20, 50, 0xCC0000)
-	img.rectangleWH(img.Rect.Max.X-20, img.Rect.Max.Y-50, 20, 50, 0xCC0000)
-
-	img.fill_image()
-	img.open_cells(sd)
-	img.image_walls(sd, 0x00CC00)
-	img.image_doors(sd)
-
-	// img.image_labels()
-	img.image_stairs(sd)
-
-	file, err := os.Create("simple.png")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	err = png.Encode(file, img)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	exec.Command("feh", "simple.png").Run()
-}
 
 const (
 	GRID_NONE   = 0
@@ -106,37 +15,52 @@ const (
 	GRID_SQUARE = 2
 )
 
-type Palete struct {
-	Fill     uint //'000000',
-	Grid     uint //'CC0000',
-	Open     uint //'FFFFFF',
+type DrawerConfig struct {
+	Fill uint //'000000',
+	Grid uint //'CC0000',
+	//Open     uint //'FFFFFF',
 	OpenGrid uint //'CCCCCC',
+	Stairs   uint
+	Arch     uint
+	Door     uint
 
+	Room      uint
+	Corridor  uint
+	Perimeter uint
+
+	Labels uint
+
+	CellSize int
 	GridType uint
 }
 
-var StandardPalete = Palete{
-	0x000000,
-	0xCC0000,
-	0xFFFFFF,
-	0xCCCCCC,
-	GRID_SQUARE,
-}
-
 type Image struct {
-	cell_size int
-	//
-
+	//cell_size int
+	*DrawerConfig
 	*image.RGBA
 }
 
-func NewImage(w, h, cell_size int) (img *Image) {
-	rect := image.Rect(0, 0, w*cell_size, h*cell_size)
-	img = &Image{
-		cell_size: cell_size,
-		RGBA:      image.NewRGBA(rect),
+func NewDrawer(config *DrawerConfig) (img *Image) {
+	return &Image{DrawerConfig: config}
+}
+
+func (img *Image) Draw(dungeon Dungeon) draw.Image {
+	if img.CellSize == 0 {
+		panic("zero CellSize")
 	}
-	return img
+	rect := image.Rect(0, 0,
+		(dungeon.Width()+1)*img.CellSize,
+		(dungeon.Height()+1)*img.CellSize)
+	img.RGBA = image.NewRGBA(rect)
+
+	img.fill_image()
+	img.open_cells(dungeon)
+	img.image_walls(dungeon, 0x00CC00)
+	img.image_doors(dungeon)
+	img.image_labels(dungeon)
+	img.image_stairs(dungeon)
+
+	return img.RGBA
 }
 
 func rgba(c uint) color.RGBA {
@@ -190,13 +114,13 @@ func (img *Image) fill_image() {
 	*/
 
 	max := img.Bounds().Size()
-	img.rectangle(0, 0, max.X, max.Y, StandardPalete.Fill)
+	img.rectangle(0, 0, max.X, max.Y, img.Fill)
 
-	switch StandardPalete.GridType {
+	switch img.GridType {
 	case GRID_HEX:
-		img.grid_hex(StandardPalete.Grid)
+		img.grid_hex(img.Grid)
 	case GRID_SQUARE:
-		img.grid_square(StandardPalete.Grid)
+		img.grid_square(img.Grid)
 	}
 
 	/*
@@ -387,7 +311,7 @@ sub base_layer {
 */
 
 func (img *Image) grid_square(c uint) {
-	dim := float64(img.cell_size)
+	dim := float64(img.CellSize)
 	off := float64(0.5)
 	size := img.Bounds().Size()
 	max_x := float64(size.X) + off
@@ -411,7 +335,7 @@ func (img *Image) grid_hex(c uint) {
 	//off := float64(0.5)
 	size := img.Bounds().Size()
 
-	dim := float64(img.cell_size)
+	dim := float64(img.CellSize)
 	dx := dim / 3.4641016151
 	dy := dim / 2.0
 	col := int(float64(size.X) / (3.0 * dx))
@@ -488,20 +412,25 @@ sub fill_image {
 */
 
 func (img *Image) open_cells(dungeon Dungeon) {
-	dim := img.cell_size
+	dim := img.CellSize
 
 	//my $base = $image->{'base_layer'};
 
 	for y := 0; y < dungeon.Height(); y++ {
 		for x := 0; x < dungeon.Width(); x++ {
-			if dungeon.At(x, y)&OPENSPACE == 0 {
-				continue
-			}
+			cell := dungeon.At(x, y)
 			x1 := x * dim
 			y1 := y * dim
 
-			img.rectangleWH(x1, y1, dim, dim, StandardPalete.Open)
-			//$ih->copy($base,$x1,$y1,$x1,$y1,($dim+1),($dim+1));
+			switch {
+			case cell&ROOM != 0:
+				img.rectangleWH(x1, y1, dim+1, dim+1, img.Room)
+			case cell&CORRIDOR != 0:
+				img.rectangleWH(x1, y1, dim+1, dim+1, img.Corridor)
+			case cell&PERIMETER != 0:
+				img.rectangleWH(x1, y1, dim+1, dim+1, img.Perimeter)
+
+			}
 		}
 	}
 }
@@ -511,7 +440,7 @@ func (img *Image) image_walls(dungeon Dungeon, c uint) {
 	gc.SetStrokeColor(rgba(c))
 	gc.SetLineWidth(2.0)
 
-	dim := float64(img.cell_size)
+	dim := float64(img.CellSize)
 
 	for y := 0; y < dungeon.Height(); y++ {
 		for x := 0; x < dungeon.Width(); x++ {
@@ -561,132 +490,150 @@ func (img *Image) image_doors(dungeon Dungeon) {
 	  my $cell = $dungeon->{'cell'};
 	*/
 
-	dim := img.cell_size
-	a_px := dim / 6
-	d_tx := dim / 4
-	//t_tx := dim / 3
+	dim := float64(img.CellSize)
+	a_px := dim / 6.0
+	d_tx := dim / 4.0
+	t_tx := dim / 3.0
 	//pal = $image->{'palette'};
 
-	arch_color := uint(0xFF00FF)
-	door_color := uint(0x00FFFF)
+	arch_color := rgba(img.Arch)
+	door_color := rgba(img.Arch)
 
 	gc := draw2d.NewGraphicContext(img.RGBA)
+	defer gc.Stroke()
 
 	for _, door := range list {
-		fmt.Println("door", door)
-
-		r := door.row
-		y1 := r * dim
+		r := door.Y()
+		y1 := float64(r) * dim
 		y2 := y1 + dim
-		c := door.col
-		x1 := c * dim
+		c := door.X()
+		x1 := float64(c) * dim
 		x2 := x1 + dim
 
-		xc, yc := 0, 0
+		xc, yc := float64(0), float64(0)
 		if dungeon.At(c-1, r)&OPENSPACE != 0 {
-			xc = (x1 + x2) / 2
+			xc = (x1 + x2) / 2.0
 		} else {
-			yc = (y1 + y2) / 2
+			yc = (y1 + y2) / 2.0
 		}
 		attr := door_attr(door)
 
-		gc.SetStrokeColor(rgba(arch_color))
+		gc.SetStrokeColor(arch_color)
 		gc.SetLineWidth(3.0)
 		if attr.wall {
 			if xc != 0 {
-				gc.MoveTo(float64(xc), float64(y1))
-				gc.LineTo(float64(xc), float64(y2))
+				gc.MoveTo(xc, y1)
+				gc.LineTo(xc, y2)
 			} else {
-				gc.MoveTo(float64(x1), float64(yc))
-				gc.LineTo(float64(x2), float64(yc))
+				gc.MoveTo(x1, yc)
+				gc.LineTo(x2, yc)
 			}
 		}
+		gc.Stroke()
 
-		gc.SetStrokeColor(rgba(door_color))
-		gc.SetLineWidth(3.0)
+		gc.SetStrokeColor(door_color)
+		gc.SetLineWidth(1.5)
 		if attr.secret {
 			if xc != 0 {
 				yc := (y1 + y2) / 2
-				gc.MoveTo(float64(xc-1), float64(yc-d_tx))
-				gc.LineTo(float64(xc+2), float64(yc-d_tx))
+				gc.MoveTo(xc-1, yc-d_tx)
+				gc.LineTo(xc+2, yc-d_tx)
 
-				gc.MoveTo(float64(xc-2), float64(yc-d_tx+1))
-				gc.LineTo(float64(xc-2), float64(yc-1))
+				gc.MoveTo(xc-2, yc-d_tx+1)
+				gc.LineTo(xc-2, yc-1)
 
-				gc.MoveTo(float64(xc-1), float64(yc))
-				gc.LineTo(float64(xc+1), float64(yc))
+				gc.MoveTo(xc-1, yc)
+				gc.LineTo(xc+1, yc)
 
-				gc.MoveTo(float64(xc+2), float64(yc+1))
-				gc.LineTo(float64(xc+2), float64(yc+d_tx-1))
+				gc.MoveTo(xc+2, yc+1)
+				gc.LineTo(xc+2, yc+d_tx-1)
 
-				gc.MoveTo(float64(xc-2), float64(yc+d_tx))
-				gc.LineTo(float64(xc+1), float64(yc+d_tx))
+				gc.MoveTo(xc-2, yc+d_tx)
+				gc.LineTo(xc+1, yc+d_tx)
 			} else {
 				xc := (x1 + x2) / 2
-				gc.MoveTo(float64(xc-d_tx), float64(yc-2))
-				gc.LineTo(float64(xc-d_tx), float64(yc+1))
+				gc.MoveTo(xc-d_tx, yc-2)
+				gc.LineTo(xc-d_tx, yc+1)
 
-				gc.MoveTo(float64(xc-d_tx+1), float64(yc+2))
-				gc.LineTo(float64(xc-1), float64(yc+2))
+				gc.MoveTo(xc-d_tx+1, yc+2)
+				gc.LineTo(xc-1, yc+2)
 
-				gc.MoveTo(float64(xc), float64(yc-1))
-				gc.LineTo(float64(xc), float64(yc+1))
+				gc.MoveTo(xc, yc-1)
+				gc.LineTo(xc, yc+1)
 
-				gc.MoveTo(float64(xc+1), float64(yc-2))
-				gc.LineTo(float64(xc+d_tx-1), float64(yc-2))
+				gc.MoveTo(xc+1, yc-2)
+				gc.LineTo(xc+d_tx-1, yc-2)
 
-				gc.MoveTo(float64(xc+d_tx), float64(yc-1))
-				gc.LineTo(float64(xc+d_tx), float64(yc+2))
+				gc.MoveTo(xc+d_tx, yc-1)
+				gc.LineTo(xc+d_tx, yc+2)
 			}
 		}
+		gc.Stroke()
 
+		gc.SetStrokeColor(arch_color)
+		gc.SetLineWidth(1.5)
 		if attr.arch {
 			if xc != 0 {
-				img.rectangle(xc-1, y1, xc+1, y1+a_px, arch_color)
-				img.rectangle(xc-1, y2-a_px, xc+1, y2, arch_color)
+				draw2d.Rect(gc, xc-1, y1, xc+1, y1+a_px)
+				draw2d.Rect(gc, xc-1, y2-a_px, xc+1, y2)
 			} else {
-				img.rectangle(x1, yc-1, x1+a_px, yc+1, arch_color)
-				img.rectangle(x2-a_px, yc-1, x2, yc+1, arch_color)
+				draw2d.Rect(gc, x1, yc-1, x1+a_px, yc+1)
+				draw2d.Rect(gc, x2-a_px, yc-1, x2, yc+1)
 			}
 		}
+		gc.Stroke()
 
+		gc.SetStrokeColor(door_color)
+		gc.SetLineWidth(1.5)
 		if attr.door {
 			if xc != 0 {
-				img.rectangle(xc-d_tx, y1+a_px+1, xc+d_tx, y2-a_px-1, door_color)
+				draw2d.Rect(gc, xc-d_tx, y1+a_px+1, xc+d_tx, y2-a_px-1)
 			} else {
-				img.rectangle(x1+a_px+1, yc-d_tx, x2-a_px-1, yc+d_tx, door_color)
+				draw2d.Rect(gc, x1+a_px+1, yc-d_tx, x2-a_px-1, yc+d_tx)
 			}
 		}
 
-		/*
-		   if ($attr->{'lock'}) {
-		     if ($xc) {
-		       $ih->line($xc,$y1+$a_px+1,$xc,$y2-$a_px-1,$door_color);
-		     } else {
-		       $ih->line($x1+$a_px+1,$yc,$x2-$a_px-1,$yc,$door_color);
-		     }
-		   }
-		   if ($attr->{'trap'}) {
-		     if ($xc) {
-		       my $yc = int(($y1 + $y2) / 2);
-		       $ih->line($xc-$t_tx,$yc,$xc+$t_tx,$yc,$door_color);
-		     } else {
-		       my $xc = int(($x1 + $x2) / 2);
-		       $ih->line($xc,$yc-$t_tx,$xc,$yc+$t_tx,$door_color);
-		     }
-		   }
-		   if ($attr->{'portc'}) {
-		     if ($xc) {
-		       my $y; for ($y = $y1+$a_px+2; $y < $y2-$a_px; $y += 2) {
-		         $ih->setPixel($xc,$y,$door_color);
-		       }
-		     } else {
-		       my $x; for ($x = $x1+$a_px+2; $x < $x2-$a_px; $x += 2) {
-		         $ih->setPixel($x,$yc,$door_color);
-		       }
-		     }
-		   }
-		*/
+		if attr.lock {
+			if xc != 0 {
+				gc.MoveTo(xc, y1+a_px+1)
+				gc.LineTo(xc, y2-a_px-1)
+			} else {
+				gc.MoveTo(x1+a_px+1, yc)
+				gc.LineTo(x2-a_px-1, yc)
+			}
+		}
+
+		if attr.trap {
+			if xc != 0 {
+				yc = (y1 + y2) / 2
+				gc.MoveTo(xc, y1+t_tx+1)
+				gc.LineTo(xc, y2-t_tx-1)
+			} else {
+				xc = (x1 + x2) / 2
+				gc.MoveTo(x1+t_tx+1, yc)
+				gc.LineTo(x2-t_tx-1, yc)
+			}
+		}
+		gc.Stroke()
+
+		gc.SetLineWidth(0.5)
+		if attr.portc {
+			if xc != 0 {
+				start, end := y1+a_px+2, y2-a_px
+				gc.MoveTo(xc, start)
+				for y := start; y < end; y += 2.0 {
+					gc.LineTo(xc, y)
+				}
+			} else {
+				start, end := x1+a_px+2, x2-a_px
+				gc.MoveTo(start, yc)
+				for x := start; x < end; x += 2.0 {
+					gc.LineTo(x, yc)
+				}
+			}
+		}
+
+		gc.Stroke()
 	}
 }
 
@@ -703,7 +650,7 @@ type DoorAttr struct {
 }
 
 func door_attr(door *Door) (attr DoorAttr) {
-	switch door.key {
+	switch door.Key() {
 	case "arch":
 		attr.arch = true
 	case "open":
@@ -723,52 +670,35 @@ func door_attr(door *Door) (attr DoorAttr) {
 		attr.wall = true
 		attr.secret = true
 	case "portc":
-		fmt.Println("PORTC !!!!!!!!!!!!!!!")
 		attr.arch = true
 		attr.portc = true
 	}
 	return
 }
 
-/*
+func (img *Image) image_labels(dungeon Dungeon) {
+	gc := draw2d.NewGraphicContext(img.RGBA)
+	gc.SetFillColor(rgba(img.Labels))
+	gc.SetFontSize(10.0)
+	draw2d.SetFontFolder(".")
 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# image labels
-
-sub image_labels {
-  my ($dungeon,$image,$ih) = @_;
-  my $cell = $dungeon->{'cell'};
-  my $dim = $image->{'cell_size'};
-  my $pal = $image->{'palette'};
-  my $color = &get_color($pal,'label');
-
-  my $r; for ($r = 0; $r <= $dungeon->{'n_rows'}; $r++) {
-    my $c; for ($c = 0; $c <= $dungeon->{'n_cols'}; $c++) {
-      next unless ($cell->[$r][$c] & $OPENSPACE);
-
-      my $char = &cell_label($cell->[$r][$c]);
-         next unless (defined $char);
-      my $x = ($c * $dim) + $image->{'char_x'};
-      my $y = ($r * $dim) + $image->{'char_y'};
-
-      $ih->string($image->{'font'},$x,$y,$char,$color);
-    }
-  }
-  return $ih;
+	dim := img.CellSize
+	for r := 0; r < dungeon.Height(); r++ {
+		for c := 0; c < dungeon.Width(); c++ {
+			cell := dungeon.At(c, r)
+			char := rune((cell >> 24) & 0xFF)
+			if cell&OPENSPACE == 0 || char == 0 {
+				continue
+			}
+			s := string([]rune{char})
+			left, top, right, bottom := gc.GetStringBounds(s)
+			w, h := right-left, bottom-top
+			x := float64(c*dim) + w
+			y := float64(r*dim) + h
+			gc.FillStringAt(s, x, y)
+		}
+	}
 }
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# cell label
-
-sub cell_label {
-  my ($cell) = @_;
-  my $i = ($cell >> 24) & 0xFF;
-     return unless ($i);
-  my $char = chr($i);
-     return unless ($char =~ /^\d/);
-  return $char;
-}
-*/
 
 func (img *Image) image_stairs(dungeon Dungeon) {
 	list := dungeon.Stairs()
@@ -777,59 +707,58 @@ func (img *Image) image_stairs(dungeon Dungeon) {
 	}
 
 	gc := draw2d.NewGraphicContext(img.RGBA)
-	gc.SetStrokeColor(rgba(0xff00ff))
+	gc.SetStrokeColor(rgba(img.Stairs))
 	gc.SetLineWidth(1.0)
 
-	dim := float64(img.cell_size)
+	dim := float64(img.CellSize)
 	s_px := dim / 2
 	t_px := dim/20 + 2
 
 	for _, stair := range list {
-		fmt.Println("stair", stair)
 		switch {
-		case stair.next_row > stair.row:
-			xc := (float64(stair.col) + 0.5) * dim
-			y1 := float64(stair.row) * dim
-			y2 := float64(stair.next_row+1) * dim
+		case stair.NextY() > stair.Y():
+			xc := (float64(stair.X()) + 0.5) * dim
+			y1 := float64(stair.Y()) * dim
+			y2 := float64(stair.NextY()+1) * dim
 			for y := y1; y < y2; y += t_px {
 				dx := s_px
-				if stair.key == "down" {
+				if stair.IsDown() {
 					dx = (y - y1) / (y2 - y1) * s_px
 				}
 				gc.MoveTo(xc-dx, y)
 				gc.LineTo(xc+dx, y)
 			}
-		case stair.next_row < stair.row:
-			xc := (float64(stair.col) + 0.5) * dim
-			y1 := float64(stair.row+1) * dim
-			y2 := float64(stair.next_row) * dim
+		case stair.NextY() < stair.Y():
+			xc := (float64(stair.X()) + 0.5) * dim
+			y1 := float64(stair.Y()+1) * dim
+			y2 := float64(stair.NextY()) * dim
 			for y := y1; y > y2; y -= t_px {
 				dx := s_px
-				if stair.key == "down" {
+				if stair.IsDown() {
 					dx = (y - y1) / (y2 - y1) * s_px
 				}
 				gc.MoveTo(xc-dx, y)
 				gc.LineTo(xc+dx, y)
 			}
-		case stair.next_col > stair.col:
-			x1 := float64(stair.col) * dim
-			x2 := float64(stair.next_col+1) * dim
-			yc := (float64(stair.row) + 0.5) * dim
+		case stair.NextX() > stair.X():
+			x1 := float64(stair.X()) * dim
+			x2 := float64(stair.NextX()+1) * dim
+			yc := (float64(stair.Y()) + 0.5) * dim
 			for x := x1; x < x2; x += t_px {
 				dy := s_px
-				if stair.key == "down" {
+				if stair.IsDown() {
 					dy = (x - x1) / (x2 - x1) * s_px
 				}
 				gc.MoveTo(x, yc-dy)
 				gc.LineTo(x, yc+dy)
 			}
-		case stair.next_col < stair.col:
-			x1 := float64(stair.col+1) * dim
-			x2 := float64(stair.next_col) * dim
-			yc := (float64(stair.row) + 0.5) * dim
+		case stair.NextX() < stair.X():
+			x1 := float64(stair.X()+1) * dim
+			x2 := float64(stair.NextX()) * dim
+			yc := (float64(stair.Y()) + 0.5) * dim
 			for x := x1; x > x2; x -= t_px {
 				dy := s_px
-				if stair.key == "down" {
+				if stair.IsDown() {
 					dy = (x - x1) / (x2 - x1) * s_px
 				}
 				gc.MoveTo(x, yc-dy)
