@@ -1,14 +1,15 @@
 package dungeon
 
 import (
+	"../core"
 	"fmt"
 	"math"
 	"math/rand"
 )
 
 type DungeonConfig struct {
-	Width          int    //101,
-	Height         int    //101,
+	DungeonWidth   int    //101,
+	DungeonHeight  int    //101,
 	DungeonLayout  string //"None", // Cross, Box, Round
 	RoomMin        int    //3,
 	RoomMax        int    //9,
@@ -133,12 +134,13 @@ type dungeon struct {
 	n_rooms          int
 
 	// in init_cells
-	cell [][]uint
+	//cell [][]uint
 
 	room  map[uint]*Room
 	stair []*Stair
 	door  []*Door
 
+	core.Map
 	*rand.Rand
 }
 
@@ -149,13 +151,14 @@ func NewDungeon(config *DungeonConfig) Dungeon {
 }
 
 // recalc
-func (dungeon *dungeon) Create(seed int64) {
+func (dungeon *dungeon) Create(seed int64, m core.Map) {
+	dungeon.Map = m
 	dungeon.Rand = rand.New(rand.NewSource(seed))
 
 	dungeon.room = make(map[uint]*Room)
 
-	dungeon.n_i = dungeon.DungeonConfig.Width / 2
-	dungeon.n_j = dungeon.DungeonConfig.Height / 2
+	dungeon.n_i = dungeon.Width() / 2
+	dungeon.n_j = dungeon.Height() / 2
 	dungeon.n_rows = dungeon.n_i * 2
 	dungeon.n_cols = dungeon.n_j * 2
 	dungeon.max_row = dungeon.n_rows - 1
@@ -172,13 +175,6 @@ func (dungeon *dungeon) Create(seed int64) {
 }
 
 func (dungeon *dungeon) init_cells() {
-	w, h := dungeon.n_cols, dungeon.n_rows
-	dungeon.cell = make([][]uint, h)
-	cell := make([]uint, w*h)
-	for i := range dungeon.cell {
-		dungeon.cell[i], cell = cell[:w], cell[w:]
-	}
-
 	if mask, ok := dungeon_layout[dungeon.DungeonLayout]; ok {
 		dungeon.mask_cells(mask)
 	} else if dungeon.DungeonLayout == "Round" {
@@ -193,7 +189,7 @@ func (dungeon *dungeon) mask_cells(mask [][]bool) {
 	for r := 0; r < dungeon.n_rows; r++ {
 		for c := 0; c < dungeon.n_cols; c++ {
 			if !mask[r*r_x][c*c_x] {
-				dungeon.cell[r][c] = BLOCKED
+				dungeon.Set(c, r, BLOCKED)
 			}
 		}
 	}
@@ -209,7 +205,7 @@ func (dungeon *dungeon) round_mask() {
 			y := math.Pow(float64(r-center_r), 2.0)
 			d := math.Sqrt(x + y)
 			if d > float64(center_c) {
-				dungeon.cell[r][c] = BLOCKED
+				dungeon.Set(c, r, BLOCKED)
 			}
 		}
 	}
@@ -229,7 +225,7 @@ func (dungeon *dungeon) pack_rooms() {
 		for j := 0; j < dungeon.n_j; j++ {
 			c := (j * 2) + 1
 
-			if dungeon.cell[r][c]&ROOM != 0 {
+			if dungeon.At(c, r)&ROOM != 0 {
 				continue
 			}
 			if (i == 0 || j == 0) && dungeon.Intn(2) == 1 {
@@ -290,13 +286,13 @@ func (dungeon *dungeon) emplace_room(proto map[string]int) {
 	// emplace room
 	for r := r1; r <= r2; r++ {
 		for c := c1; c <= c2; c++ {
-			cell := dungeon.cell[r][c]
+			cell := dungeon.At(c, r)
 			if cell&ENTRANCE != 0 {
 				cell = cell &^ ESPACE
 			} else if cell&PERIMETER != 0 {
 				cell = cell &^ PERIMETER
 			}
-			dungeon.cell[r][c] = cell | ROOM | (room_id << 6)
+			dungeon.Set(c, r, cell|ROOM|(room_id<<6))
 		}
 	}
 
@@ -316,28 +312,32 @@ func (dungeon *dungeon) emplace_room(proto map[string]int) {
 		if r == dungeon.n_rows {
 			continue
 		}
-		if dungeon.cell[r][c1-1]&(ROOM|ENTRANCE) == 0 {
-			dungeon.cell[r][c1-1] |= PERIMETER
+		if dungeon.At(c1-1, r)&(ROOM|ENTRANCE) == 0 {
+			cell := dungeon.At(c1-1, r)
+			dungeon.Set(c1-1, r, cell|PERIMETER)
 		}
 		if c2+1 == dungeon.n_cols {
 			continue
 		}
-		if dungeon.cell[r][c2+1]&(ROOM|ENTRANCE) == 0 {
-			dungeon.cell[r][c2+1] |= PERIMETER
+		if dungeon.At(c2+1, r)&(ROOM|ENTRANCE) == 0 {
+			cell := dungeon.At(c2+1, r)
+			dungeon.Set(c2+1, r, cell|PERIMETER)
 		}
 	}
 	for c := c1 - 1; c <= c2+1; c++ {
 		if c == dungeon.n_cols {
 			continue
 		}
-		if dungeon.cell[r1-1][c]&(ROOM|ENTRANCE) == 0 {
-			dungeon.cell[r1-1][c] |= PERIMETER
+		if dungeon.At(c, r1-1)&(ROOM|ENTRANCE) == 0 {
+			cell := dungeon.At(c, r1-1)
+			dungeon.Set(c, r1-1, cell|PERIMETER)
 		}
 		if r2+1 == dungeon.n_rows {
 			continue
 		}
-		if dungeon.cell[r2+1][c1]&(ROOM|ENTRANCE) == 0 {
-			dungeon.cell[r2+1][c] |= PERIMETER
+		if dungeon.At(c, r2+1)&(ROOM|ENTRANCE) == 0 {
+			cell := dungeon.At(c, r2+1)
+			dungeon.Set(c, r2+1, cell|PERIMETER)
 		}
 	}
 }
@@ -398,12 +398,12 @@ func (dungeon *dungeon) sound_room(r1, c1, r2, c2 int) (hit map[uint]int, blocke
 
 	for r := r1; r <= r2; r++ {
 		for c := c1; c <= c2; c++ {
-			if dungeon.cell[r][c]&BLOCKED != 0 {
+			if dungeon.At(c, r)&BLOCKED != 0 {
 				blocked = true
 				return
 			}
-			if dungeon.cell[r][c]&ROOM != 0 {
-				id := (dungeon.cell[r][c] & ROOM_ID) >> 6
+			if dungeon.At(c, r)&ROOM != 0 {
+				id := (dungeon.At(c, r) & ROOM_ID) >> 6
 				hit[id] += 1
 			}
 		}
@@ -438,7 +438,7 @@ func (dungeon *dungeon) open_room(room *Room, connects map[string]bool) {
 
 		door_r := sill.door_r
 		door_c := sill.door_c
-		door_cell := dungeon.cell[door_r][door_c]
+		door_cell := dungeon.At(door_c, door_r)
 		if door_cell&DOORSPACE != 0 {
 			goto Start
 		}
@@ -461,8 +461,8 @@ func (dungeon *dungeon) open_room(room *Room, connects map[string]bool) {
 			r := open_r + open_dir.di()*x
 			c := open_c + open_dir.dj()*x
 
-			cell := dungeon.cell[r][c]
-			dungeon.cell[r][c] = (cell &^ PERIMETER) | ENTRANCE
+			cell := dungeon.At(c, r)
+			dungeon.Set(c, r, (cell&^PERIMETER)|ENTRANCE)
 		}
 
 		door := &Door{
@@ -471,37 +471,41 @@ func (dungeon *dungeon) open_room(room *Room, connects map[string]bool) {
 			out_id: out_id,
 		}
 
+		cell := dungeon.At(door_c, door_r)
+
 		switch dungeon.door_type() {
 		case ARCH:
-			dungeon.cell[door_r][door_c] |= ARCH
+			cell |= ARCH
 			door.key = "arch"
 			door.t = "Archway"
 		case DOOR:
-			dungeon.cell[door_r][door_c] |= DOOR
-			dungeon.cell[door_r][door_c] |= 'o' << 24
+			cell |= DOOR
+			cell |= 'o' << 24
 			door.key = "open"
 			door.t = "Unlocked Door"
 		case LOCKED:
-			dungeon.cell[door_r][door_c] |= LOCKED
-			dungeon.cell[door_r][door_c] |= 'x' << 24
+			cell |= LOCKED
+			cell |= 'x' << 24
 			door.key = "lock"
 			door.t = "Locked Door"
 		case TRAPPED:
-			dungeon.cell[door_r][door_c] |= TRAPPED
-			dungeon.cell[door_r][door_c] |= 't' << 24
+			cell |= TRAPPED
+			cell |= 't' << 24
 			door.key = "trap"
 			door.t = "Trapped Door"
 		case SECRET:
-			dungeon.cell[door_r][door_c] |= SECRET
-			dungeon.cell[door_r][door_c] |= 's' << 24
+			cell |= SECRET
+			cell |= 's' << 24
 			door.key = "secret"
 			door.t = "Secret Door"
 		case PORTC:
-			dungeon.cell[door_r][door_c] |= PORTC
-			dungeon.cell[door_r][door_c] |= '#' << 24
+			cell |= PORTC
+			cell |= '#' << 24
 			door.key = "portc"
 			door.t = "Portcullis"
 		}
+
+		dungeon.Set(door_c, door_r, cell)
 
 		if room.door == nil {
 			room.door = make(map[Dir][]*Door)
@@ -583,7 +587,7 @@ func (dungeon *dungeon) check_sill(room *Room, sill_r, sill_c int, dir Dir) *Sil
 	door_r := sill_r + dir.di()
 	door_c := sill_c + dir.dj()
 
-	door_cell := dungeon.cell[door_r][door_c]
+	door_cell := dungeon.At(door_c, door_r)
 	if door_cell&PERIMETER == 0 {
 		return nil
 	}
@@ -592,7 +596,7 @@ func (dungeon *dungeon) check_sill(room *Room, sill_r, sill_c int, dir Dir) *Sil
 	}
 	out_r := door_r + dir.di()
 	out_c := door_c + dir.dj()
-	out_cell := dungeon.cell[out_r][out_c]
+	out_cell := dungeon.At(out_c, out_r)
 	if out_cell&BLOCKED != 0 {
 		return nil
 	}
@@ -640,7 +644,8 @@ func (dungeon *dungeon) label_rooms() {
 		label_r := (room.North + room.South) / 2
 		label_c := (room.West+room.East-len(label))/2 + 1
 		for c, char := range label {
-			dungeon.cell[label_r][label_c+c] |= uint(char) << 24
+			cell := dungeon.At(label_c+c, label_r)
+			dungeon.Set(label_c+c, label_r, cell|uint(char)<<24)
 		}
 	}
 }
@@ -651,7 +656,7 @@ func (dungeon *dungeon) corridors() {
 		r := i*2 + 1
 		for j := 1; j < dungeon.n_j; j++ {
 			c := j*2 + 1
-			if dungeon.cell[r][c]&CORRIDOR != 0 {
+			if dungeon.At(c, r)&CORRIDOR != 0 {
 				continue
 			}
 			dungeon.tunnel(i, j, ZERO_DIR)
@@ -722,7 +727,7 @@ func (dungeon *dungeon) sound_tunnel(mid_r, mid_c, next_r, next_c int) (ok bool)
 
 	for r := r1; r <= r2; r++ {
 		for c := c1; c <= c2; c++ {
-			if dungeon.cell[r][c]&BLOCK_CORR != 0 {
+			if dungeon.At(c, r)&BLOCK_CORR != 0 {
 				return
 			}
 		}
@@ -736,8 +741,8 @@ func (dungeon *dungeon) delve_tunnel(this_r, this_c, next_r, next_c int) bool {
 
 	for r := r1; r <= r2; r++ {
 		for c := c1; c <= c2; c++ {
-			cell := dungeon.cell[r][c]
-			dungeon.cell[r][c] = (cell &^ ENTRANCE) | CORRIDOR
+			cell := dungeon.At(c, r)
+			dungeon.Set(c, r, (cell&^ENTRANCE)|CORRIDOR)
 		}
 	}
 	return true
@@ -768,15 +773,17 @@ func (dungeon *dungeon) emplace_stairs(n int) {
 			t = i
 		}
 
+		cell := dungeon.At(c, r)
 		if t == 0 {
-			dungeon.cell[r][c] |= STAIR_DN
-			dungeon.cell[r][c] |= 'd' << 24
+			cell |= STAIR_DN
+			cell |= 'd' << 24
 			stair.key = "down"
 		} else {
-			dungeon.cell[r][c] |= STAIR_UP
-			dungeon.cell[r][c] |= 'u' << 24
+			cell |= STAIR_UP
+			cell |= 'u' << 24
 			stair.key = "up"
 		}
+		dungeon.Set(c, r, cell)
 
 		dungeon.stair = append(dungeon.stair, stair)
 	}
@@ -831,10 +838,10 @@ func (dungeon *dungeon) stair_ends() (list []*Stair) {
 		for j := 0; j < dungeon.n_j; j++ {
 			c := j*2 + 1
 
-			if dungeon.cell[r][c] != CORRIDOR {
+			if dungeon.At(c, r) != CORRIDOR {
 				continue
 			}
-			if dungeon.cell[r][c]&STAIRS != 0 {
+			if dungeon.At(c, r)&STAIRS != 0 {
 				continue
 			}
 
@@ -874,10 +881,10 @@ func (dungeon *dungeon) collapse_tunnels(p int, xc map[Dir]Tunnel) {
 		for j := 0; j < dungeon.n_j; j++ {
 			c := j*2 + 1
 
-			if dungeon.cell[r][c]&OPENSPACE == 0 {
+			if dungeon.At(c, r)&OPENSPACE == 0 {
 				continue
 			}
-			if dungeon.cell[r][c]&STAIRS != 0 {
+			if dungeon.At(c, r)&STAIRS != 0 {
 				continue
 			}
 			if !(all || dungeon.Intn(100) < p) {
@@ -913,18 +920,19 @@ var close_end = map[Dir]Tunnel{
 }
 
 func (dungeon *dungeon) collapse(r, c int, xc map[Dir]Tunnel) {
-	if !dungeon.checkPos(r, c) || dungeon.cell[r][c]&OPENSPACE == 0 {
+	if !dungeon.checkPos(r, c) || dungeon.At(c, r)&OPENSPACE == 0 {
 		return
 	}
 
 	for dir := range xc {
 		if dungeon.check_tunnel(r, c, xc[dir]) {
 			for _, p := range xc[dir].close {
-				dungeon.cell[r+p[0]][c+p[1]] = NOTHING
+				dungeon.Set(c+p[1], r+p[0], NOTHING)
 			}
 			p := xc[dir].open
 			if len(p) != 0 {
-				dungeon.cell[r+p[0]][c+p[1]] |= CORRIDOR
+				cell := dungeon.At(c+p[1], r+p[0])
+				dungeon.Set(c+p[1], r+p[0], cell|CORRIDOR)
 			}
 			p = xc[dir].recurse
 			if len(p) != 0 {
@@ -946,7 +954,7 @@ func (dungeon *dungeon) check_tunnel(r, c int, check Tunnel) (ok bool) {
 		if !dungeon.checkPos(rr, cc) {
 			continue
 		}
-		if dungeon.cell[rr][cc] != CORRIDOR {
+		if dungeon.At(cc, rr) != CORRIDOR {
 			return
 		}
 	}
@@ -956,7 +964,7 @@ func (dungeon *dungeon) check_tunnel(r, c int, check Tunnel) (ok bool) {
 		if !dungeon.checkPos(rr, cc) {
 			continue
 		}
-		if dungeon.cell[rr][cc]&OPENSPACE != 0 {
+		if dungeon.At(cc, rr)&OPENSPACE != 0 {
 			return
 		}
 	}
@@ -980,7 +988,7 @@ func (dungeon *dungeon) fix_doors() {
 			for _, door := range room.door[dir] {
 				door_r := door.row
 				door_c := door.col
-				door_cell := dungeon.cell[door_r][door_c]
+				door_cell := dungeon.At(door_c, door_r)
 				if door_cell&OPENSPACE == 0 {
 					continue
 				}
@@ -1009,8 +1017,8 @@ func (dungeon *dungeon) fix_doors() {
 func (dungeon *dungeon) empty_blocks() {
 	for r := 0; r < dungeon.n_rows; r++ {
 		for c := 0; c < dungeon.n_cols; c++ {
-			if dungeon.cell[r][c]&BLOCKED != 0 {
-				dungeon.cell[r][c] = NOTHING
+			if dungeon.At(c, r)&BLOCKED != 0 {
+				dungeon.Set(c, r, NOTHING)
 			}
 		}
 	}

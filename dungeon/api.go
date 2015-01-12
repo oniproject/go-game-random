@@ -1,23 +1,14 @@
 package dungeon
 
+import "../core"
+
 type Dungeon interface {
-	Create(seed int64)
-	Width() int
-	Height() int
-	At(x, y int) uint
+	core.ReadonlyMap
+	Create(seed int64, m core.Map)
 	Doors() []*Door
 	Stairs() []*Stair
 }
 
-func (d *dungeon) Width() int  { return d.n_cols }
-func (d *dungeon) Height() int { return d.n_rows }
-func (d *dungeon) At(x, y int) uint {
-	check := x >= 0 && x < d.Width() && y >= 0 && y < d.Height()
-	if !check {
-		return 0
-	}
-	return d.cell[y][x]
-}
 func (d *dungeon) Doors() []*Door   { return d.door }
 func (d *dungeon) Stairs() []*Stair { return d.stair }
 

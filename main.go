@@ -4,16 +4,22 @@ package main
 
 import (
 	. "."
+	"./core"
+	. "./dla"
 	. "./dungeon"
+	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 )
 
 var dungeon_config = &DungeonConfig{
-	Width:          101,
-	Height:         101,
+	DungeonWidth:   101,
+	DungeonHeight:  101,
 	DungeonLayout:  "None", // Cross, Box, Round
 	RoomMin:        3,
 	RoomMax:        9,
@@ -42,13 +48,47 @@ var drawer_config = &DrawerConfig{
 }
 
 func main() {
+	m := core.NewCellMap(dungeon_config.DungeonWidth, dungeon_config.DungeonHeight)
 	dungeon := NewDungeon(dungeon_config)
-	dungeon.Create(1)
+	dungeon.Create(1, m)
 
 	drawer := NewDrawer(drawer_config)
 	img := drawer.Draw(dungeon)
 
-	file, err := os.Create("simple.png")
+	saveImage(img, "simple-dungeon.png")
+
+	m = core.NewCellMap(dungeon_config.DungeonWidth, dungeon_config.DungeonHeight)
+
+	dim := 8
+	rect := image.Rect(0, 0,
+		(m.Width()+1)*dim,
+		(m.Height()+1)*dim)
+	ii := image.NewRGBA(rect)
+	max := m.Width() * m.Height() / 4
+	x := &DLA{
+		OrthogonalAllowed: false,
+		Rand:              rand.New(rand.NewSource(1)),
+	}
+	x.Run(m, 100, 5, 0xCC0000, max)
+	x.Run(m, 5, 50, 0x0000CC, max*2)
+	x.Run(m, 34, 34, 0x00CC00, max)
+	x.Run(m, 50, 5, 0x00CCCC, max/2)
+
+	for y := 0; y < m.Height(); y++ {
+		for x := 0; x < m.Width(); x++ {
+			c := m.At(x, y)
+			src := &image.Uniform{rgba(c)}
+			draw.Draw(ii, image.Rect(x*dim, y*dim, (x+1)*dim, (y+1)*dim), src, image.ZP, draw.Src)
+		}
+	}
+
+	saveImage(ii, "simple.png")
+
+	exec.Command("feh", "simple.png").Run()
+}
+
+func saveImage(img image.Image, fname string) {
+	file, err := os.Create(fname)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,6 +98,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
-	exec.Command("feh", "simple.png").Run()
+func rgba(c uint) color.RGBA {
+	return color.RGBA{
+		uint8(c >> 16), // r
+		uint8(c >> 8),  // g
+		uint8(c >> 0),  // b
+		0xff,           // a
+	}
 }
