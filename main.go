@@ -7,6 +7,7 @@ import (
 	"./core"
 	. "./dla"
 	. "./dungeon"
+	"github.com/seehuhn/mt19937"
 	"image"
 	"image/color"
 	"image/draw"
@@ -44,45 +45,59 @@ var drawer_config = &DrawerConfig{
 	Labels: 0xFF00FF,
 
 	GridType: GRID_SQUARE,
-	CellSize: 18,
+	CellSize: 8,
 }
 
 func main() {
-	m := core.NewCellMap(dungeon_config.DungeonWidth, dungeon_config.DungeonHeight)
+	w, h := dungeon_config.DungeonWidth, dungeon_config.DungeonHeight
+	m := core.NewCellMap(w, h)
 	dungeon := NewDungeon(dungeon_config)
 	dungeon.Create(1, m)
 
 	drawer := NewDrawer(drawer_config)
 	img := drawer.Draw(dungeon)
 
-	saveImage(img, "simple-dungeon.png")
+	saveImage(img, "simple.png")
 
-	m = core.NewCellMap(dungeon_config.DungeonWidth, dungeon_config.DungeonHeight)
+	{
+		m = core.NewCellMap(w*8, h*8)
 
-	dim := 8
-	rect := image.Rect(0, 0,
-		(m.Width()+1)*dim,
-		(m.Height()+1)*dim)
-	ii := image.NewRGBA(rect)
-	max := m.Width() * m.Height() / 4
-	x := &DLA{
-		OrthogonalAllowed: false,
-		Rand:              rand.New(rand.NewSource(1)),
-	}
-	x.Run(m, 100, 5, 0xCC0000, max)
-	x.Run(m, 5, 50, 0x0000CC, max*2)
-	x.Run(m, 34, 34, 0x00CC00, max)
-	x.Run(m, 50, 5, 0x00CCCC, max/2)
+		dim := 1
+		rect := image.Rect(0, 0,
+			(m.Width()+1)*dim,
+			(m.Height()+1)*dim)
+		ii := image.NewRGBA(rect)
+		max := m.Width() * m.Height() / 4
 
-	for y := 0; y < m.Height(); y++ {
-		for x := 0; x < m.Width(); x++ {
-			c := m.At(x, y)
-			src := &image.Uniform{rgba(c)}
-			draw.Draw(ii, image.Rect(x*dim, y*dim, (x+1)*dim, (y+1)*dim), src, image.ZP, draw.Src)
+		x := &DLA{
+			OrthogonalAllowed: false,
+			Rand:              rand.New(mt19937.New()),
 		}
-	}
+		x.Seed(1)
 
-	saveImage(ii, "simple.png")
+		log.Println("start 1")
+		x.Run(m, m.Width()-3, 5, 0xCC0000, max)
+		log.Println("start 2")
+		x.Run(m, 5, m.Height()/2, 0x0000CC, max*2)
+		log.Println("start 3")
+		x.Run(m, 34, 34, 0x00CC00, max)
+		log.Println("start 4")
+		x.Run(m, m.Height()-3, 5, 0x00CCCC, max/2)
+		log.Println("finish")
+
+		for y := 0; y < m.Height(); y++ {
+			for x := 0; x < m.Width(); x++ {
+				c := m.At(x, y)
+				if c != 0 {
+					src := &image.Uniform{rgba(c)}
+					draw.Draw(ii, image.Rect(x*dim, y*dim, (x+1)*dim, (y+1)*dim), src, image.ZP, draw.Src)
+				}
+			}
+		}
+		log.Println("end draw")
+
+		saveImage(ii, "simple.png")
+	}
 
 	exec.Command("feh", "simple.png").Run()
 }

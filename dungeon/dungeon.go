@@ -133,9 +133,6 @@ type dungeon struct {
 	max_row, max_col int
 	n_rooms          int
 
-	// in init_cells
-	//cell [][]uint
-
 	room  map[uint]*Room
 	stair []*Stair
 	door  []*Door
@@ -566,13 +563,6 @@ func (dungeon *dungeon) door_sills(room *Room) []*Sill {
 		j := dungeon.Intn(i + 1)
 		list[i], list[j] = list[j], list[i]
 	}
-	/*
-		n := len(list)
-		for i := 0; i < n; i++ {
-			j := i + dungeon.Intn(n-1)
-			list[i], list[j] = list[j], list[i]
-		}
-	*/
 	return list
 }
 
