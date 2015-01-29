@@ -7,6 +7,7 @@ import (
 	"./core"
 	. "./dla"
 	. "./dungeon"
+	. "./simplex"
 	"github.com/seehuhn/mt19937"
 	"image"
 	"image/color"
@@ -100,7 +101,42 @@ func main() {
 		}
 		log.Println("end draw")
 
-		saveImage(ii, "simple.png")
+		//saveImage(ii, "simple.png")
+	}
+
+	{
+		rect := image.Rect(0, 0, 500, 500)
+		ii := image.NewGray(rect)
+
+		n := NewNoise(500, 0.3, 5000)
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			for x := rect.Min.X; x < rect.Max.X; x++ {
+				data := (n.Noise2D(x, y) + 0.5) / 2
+				if data > 1 {
+					data = 1
+				} else if data < 0 {
+					data = 0
+				}
+				/*c := color.RGBA{}
+				switch {
+				default:
+					c = rgba(0x0000FF)
+				case data > 0.3:
+					c = rgba(0xFFFF00)
+				case data > 0.4:
+					c = rgba(0x00FF00)
+				case data > 0.6:
+					c = rgba(0x00FF00)
+				case data > 0.8:
+					c = rgba(0xFFFFFF)
+				}
+				ii.Set(x, y, c)
+				*/
+
+				ii.SetGray(x, y, color.Gray{Y: uint8(data * 255)})
+			}
+			saveImage(ii, "simple.png")
+		}
 	}
 
 	exec.Command("feh", "simple.png").Run()
