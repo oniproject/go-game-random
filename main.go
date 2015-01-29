@@ -18,18 +18,6 @@ import (
 	"os/exec"
 )
 
-var dungeon_config = &DungeonConfig{
-	DungeonWidth:   101,
-	DungeonHeight:  101,
-	DungeonLayout:  "None", // Cross, Box, Round
-	RoomMin:        3,
-	RoomMax:        9,
-	RoomPacked:     false,
-	CorridorLayout: CORRIDOR_Bent,
-	RemoveDeadends: 100, // percentage
-	AddStairs:      2,   // count stairs
-}
-
 var drawer_config = &DrawerConfig{
 	Fill:     0x000000,
 	Grid:     0x333333,
@@ -49,18 +37,34 @@ var drawer_config = &DrawerConfig{
 }
 
 func main() {
-	w, h := dungeon_config.DungeonWidth, dungeon_config.DungeonHeight
-	m := core.NewCellMap(w, h)
-	dungeon := NewDungeon(dungeon_config)
-	dungeon.Create(1, m)
-
-	drawer := NewDrawer(drawer_config)
-	img := drawer.Draw(dungeon)
-
-	saveImage(img, "simple.png")
-
+	w, h := 101, 101
 	{
-		m = core.NewCellMap(w*8, h*8)
+		m := core.NewCellMap(w, h)
+
+		dungeon := &Dungeon{
+			DungeonWidth:   101,
+			DungeonHeight:  101,
+			DungeonLayout:  "None", // Cross, Box, Round
+			RoomMin:        3,
+			RoomMax:        9,
+			RoomPacked:     false,
+			CorridorLayout: CORRIDOR_Bent,
+			RemoveDeadends: 100, // percentage
+			AddStairs:      2,   // count stairs
+			Rand:           rand.New(mt19937.New()),
+		}
+
+		dungeon.Seed(1)
+		dungeon.Create(m)
+
+		drawer := NewDrawer(drawer_config)
+		img := drawer.Draw(dungeon)
+
+		saveImage(img, "simple.png")
+	}
+
+	if false {
+		m := core.NewCellMap(w*8, h*8)
 
 		dim := 1
 		rect := image.Rect(0, 0,

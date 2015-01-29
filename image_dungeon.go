@@ -44,7 +44,7 @@ func NewDrawer(config *DrawerConfig) (img *Image) {
 	return &Image{DrawerConfig: config}
 }
 
-func (img *Image) Draw(dungeon Dungeon) draw.Image {
+func (img *Image) Draw(dungeon *Dungeon) draw.Image {
 	if img.CellSize == 0 {
 		panic("zero CellSize")
 	}
@@ -411,7 +411,7 @@ sub fill_image {
 # open cells
 */
 
-func (img *Image) open_cells(dungeon Dungeon) {
+func (img *Image) open_cells(dungeon *Dungeon) {
 	dim := img.CellSize
 
 	//my $base = $image->{'base_layer'};
@@ -435,7 +435,7 @@ func (img *Image) open_cells(dungeon Dungeon) {
 	}
 }
 
-func (img *Image) image_walls(dungeon Dungeon, c uint) {
+func (img *Image) image_walls(dungeon *Dungeon, c uint) {
 	gc := draw2d.NewGraphicContext(img.RGBA)
 	gc.SetStrokeColor(rgba(c))
 	gc.SetLineWidth(2.0)
@@ -475,7 +475,7 @@ func (img *Image) image_walls(dungeon Dungeon, c uint) {
 	gc.Stroke()
 }
 
-func (img *Image) image_doors(dungeon Dungeon) {
+func (img *Image) image_doors(dungeon *Dungeon) {
 
 	list := dungeon.Doors()
 	if len(list) == 0 {
@@ -676,7 +676,7 @@ func door_attr(door *Door) (attr DoorAttr) {
 	return
 }
 
-func (img *Image) image_labels(dungeon Dungeon) {
+func (img *Image) image_labels(dungeon *Dungeon) {
 	gc := draw2d.NewGraphicContext(img.RGBA)
 	gc.SetFillColor(rgba(img.Labels))
 	gc.SetFontSize(10.0)
@@ -700,7 +700,7 @@ func (img *Image) image_labels(dungeon Dungeon) {
 	}
 }
 
-func (img *Image) image_stairs(dungeon Dungeon) {
+func (img *Image) image_stairs(dungeon *Dungeon) {
 	list := dungeon.Stairs()
 	if len(list) == 0 {
 		return

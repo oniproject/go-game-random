@@ -1,16 +1,17 @@
 package dungeon
 
-import "../core"
+//import "../core"
 
+/*
 type Dungeon interface {
 	core.ReadonlyMap
 	Create(seed int64, m core.Map)
 	Doors() []*Door
 	Stairs() []*Stair
-}
+}*/
 
-func (d *dungeon) Doors() []*Door   { return d.door }
-func (d *dungeon) Stairs() []*Stair { return d.stair }
+func (d *Dungeon) Doors() []*Door   { return d.door }
+func (d *Dungeon) Stairs() []*Stair { return d.stair }
 
 type Door struct {
 	row, col int
