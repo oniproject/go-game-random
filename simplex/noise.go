@@ -39,25 +39,25 @@ func NewNoise(largestFeature int, persistence float64, seed int64) *Noise {
 	return noise
 }
 
-func (n *Noise) Noise2D(x, y int) (result float64) {
+func (n *Noise) Noise2D(x, y float64) (result float64) {
 	for i, octave := range n.octaves {
-		f := n.frequencys[i]
-		a := n.amplitudes[i]
-		result += octave.Noise2D(float64(x)/f, float64(y)/f) * a
+		//f := n.frequencys[i]
+		//a := n.amplitudes[i]
+		f := math.Pow(2, float64(i))
+		a := math.Pow(n.persistence, float64(len(n.octaves)-i+1))
+		result += octave.Noise2D(x/f, y/f) * a
 	}
 	return
 }
 
-/*
-func (n *Noise) Noise3D(x, y, z int) (result float64) {
+func (n *Noise) Noise3D(x, y, z float64) (result float64) {
 	for i, octave := range n.octaves {
 		f := math.Pow(2, float64(i))
-		a := math.Pow(persistence, len(noise.octaves)-i+1)
-		result += octave.Noise3D(x/f, y/f, z/f) * a
+		a := math.Pow(n.persistence, float64(len(n.octaves)-i+1))
+		result += octave.Noise3D(float64(x)/f, float64(y)/f, float64(z)/f) * a
 	}
 	return
 }
-*/
 
 /*
 func (n *Noise) Noise4D(x, y, z, w int) (result float64) {
