@@ -8,6 +8,7 @@ import (
 	. "./dla"
 	. "./dungeon"
 	. "./simplex"
+	"flag"
 	"github.com/seehuhn/mt19937"
 	"image"
 	"image/color"
@@ -18,6 +19,24 @@ import (
 	"os"
 	"os/exec"
 )
+
+var outFile = flag.String("o", "simple.png", "output file name")
+var viewer = flag.String("viewer", "feh", "image viewer")
+var dlaDemo = flag.Bool("dla", false, "if true run DLA demo")
+var noiseDemo = flag.String("noise", "simplex", "if any of [simplex] run noise demo")
+
+var seed = flag.Int64("seed", 1, "random seed")
+
+var dungeonDemo = flag.Bool("dungeon", false, "if true run dungeon demo")
+var dungeonWidth = flag.Int("dw", 101, "dungeon width")
+var dungeonHeight = flag.Int("dh", 101, "dungeon height")
+var dungeonRoomMin = flag.Int("drMin", 3, "dungeon RoomMin")
+var dungeonRoomMax = flag.Int("drMax", 9, "dungeon RoomMax")
+var dungeonRoomPacked = flag.Bool("drP", false, "dungeon RoomPacked")
+var dungeonLayout = flag.String("dLayout", "None", "dungeon Lauout [None, Cross, Box, Round]")
+var dungeonCorridorLauout = flag.Int("dCorridor", CORRIDOR_Bent, "dungeon CorridorLayout [0..100]")
+var dungeonDeadends = flag.Int("dDeadends", 100, "dungeon RemoveDeadends [0..100]")
+var dungeonStairs = flag.Int("dStairs", 2, "dungeon AddStairs")
 
 var drawer_config = &DrawerConfig{
 	Fill:     0x000000,
@@ -38,33 +57,40 @@ var drawer_config = &DrawerConfig{
 }
 
 func main() {
+	flag.Parse()
+
+	rnd := rand.New(mt19937.New())
+	rnd.Seed(*seed)
+
 	w, h := 101, 101
-	{
+	switch {
+	default:
+		flag.PrintDefaults()
+		return
+	case *dungeonDemo:
 		m := core.NewCellMap(w, h)
 
 		dungeon := &Dungeon{
-			DungeonWidth:   101,
-			DungeonHeight:  101,
-			DungeonLayout:  "None", // Cross, Box, Round
-			RoomMin:        3,
-			RoomMax:        9,
-			RoomPacked:     false,
-			CorridorLayout: CORRIDOR_Bent,
-			RemoveDeadends: 100, // percentage
-			AddStairs:      2,   // count stairs
-			Rand:           rand.New(mt19937.New()),
+			DungeonWidth:   *dungeonWidth,
+			DungeonHeight:  *dungeonHeight,
+			DungeonLayout:  *dungeonLayout, // Cross, Box, Round
+			RoomMin:        *dungeonRoomMin,
+			RoomMax:        *dungeonRoomMax,
+			RoomPacked:     *dungeonRoomPacked,
+			CorridorLayout: *dungeonCorridorLauout,
+			RemoveDeadends: *dungeonDeadends, // percentage
+			AddStairs:      *dungeonStairs,   // count stairs
+			Rand:           rnd,
 		}
 
-		dungeon.Seed(1)
 		dungeon.Create(m)
 
 		drawer := NewDrawer(drawer_config)
 		img := drawer.Draw(dungeon)
 
-		saveImage(img, "simple.png")
-	}
+		saveImage(img)
 
-	if false {
+	case *dlaDemo:
 		m := core.NewCellMap(w*8, h*8)
 
 		dim := 1
@@ -76,19 +102,13 @@ func main() {
 
 		x := &DLA{
 			OrthogonalAllowed: false,
-			Rand:              rand.New(mt19937.New()),
+			Rand:              rnd,
 		}
-		x.Seed(1)
 
-		log.Println("start 1")
 		x.Run(m, m.Width()-3, 5, 0xCC0000, max)
-		log.Println("start 2")
 		x.Run(m, 5, m.Height()/2, 0x0000CC, max*2)
-		log.Println("start 3")
 		x.Run(m, 34, 34, 0x00CC00, max)
-		log.Println("start 4")
 		x.Run(m, m.Height()-3, 5, 0x00CCCC, max/2)
-		log.Println("finish")
 
 		for y := 0; y < m.Height(); y++ {
 			for x := 0; x < m.Width(); x++ {
@@ -99,21 +119,24 @@ func main() {
 				}
 			}
 		}
-		log.Println("end draw")
 
-		//saveImage(ii, "simple.png")
-	}
+		saveImage(ii)
 
-	{
+	case *noiseDemo == "simplex":
 		rect := image.Rect(0, 0, 1500, 1500)
 		ii := image.NewRGBA(rect)
 
-		n := NewNoise(800, 0.75, 5000)
+		n := &Noise{
+			LargestFeature: 800,
+			Persistence:    0.75,
+			Rand:           rnd,
+		}
+		n.Init()
+
 		//red := rgba(0xFF0000)
 		white := rgba(0xFFFFFF)
 		black := rgba(0x000000)
 		//green := rgba(0x0000FF)
-		rand.Seed(5000)
 		//n := NewOctave(5000)
 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
 			for x := rect.Min.X; x < rect.Max.X; x++ {
@@ -150,14 +173,16 @@ func main() {
 				//ii.SetGray(x, y, color.Gray{Y: uint8(data * 255)})
 			}
 		}
-		saveImage(ii, "simple.png")
+		saveImage(ii)
 	}
 
-	exec.Command("feh", "simple.png").Run()
+	if *viewer != "" {
+		exec.Command(*viewer, *outFile).Run()
+	}
 }
 
-func saveImage(img image.Image, fname string) {
-	file, err := os.Create(fname)
+func saveImage(img image.Image) {
+	file, err := os.Create(*outFile)
 	if err != nil {
 		log.Fatal(err)
 	}

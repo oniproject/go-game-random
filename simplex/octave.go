@@ -61,12 +61,12 @@ type Octave struct {
 	permMod12 [512]int
 }
 
-func NewOctave(seed int64) *Octave {
+func NewOctave(rnd *rand.Rand) *Octave {
 	octave := &Octave{}
-	p := rand.Perm(256)
+	p := rnd.Perm(256)
 
 	for i := 0; i < 512; i++ {
-		octave.perm[i] = p[i&255] // ? 256
+		octave.perm[i] = p[i&255]
 		octave.permMod12[i] = octave.perm[i] % 12
 	}
 	return octave
